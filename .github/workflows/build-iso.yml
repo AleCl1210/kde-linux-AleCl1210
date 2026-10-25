@@ -99,7 +99,13 @@ jobs:
             tail -n 400 build-console.log 2>/dev/null || echo "(build-console.log missing)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "::error::ISO build failed — full console tail is committed to ci-logs/last-failure.log on the branch"
+          # Also put the tail into an annotation: annotations are readable
+          # through the API even when the log/artifact endpoints are not.
+          if [ -s build-console.log ]; then
+            echo "::error::$(tail -c 6000 build-console.log | sed ':a;N;$!ba;s/\n/%0A/g')"
+          else
+            echo "::error::ISO build failed and build-console.log is missing"
+          fi
           # Push the console tail back to the branch: a channel that does not
           # depend on the Actions log/artifact download endpoints.
           mkdir -p ci-logs
@@ -110,7 +116,10 @@ jobs:
           if git diff --cached --quiet; then
             echo "No log to commit"
           else
-            git commit -m "ci: capture ISO build failure log [skip ci]"
+            # --no-verify: build.sh installed the repo's pre-commit hook into
+            # .git/hooks during the build; its linters must not run on a raw
+            # build log (and pre-commit is not installed on the runner).
+            git commit --no-verify -m "ci: capture ISO build failure log [skip ci]"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
