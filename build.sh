@@ -110,8 +110,10 @@ GE_PROTON_TAG=GE-Proton11-11
 GE_PROTON_ASSET="${GE_PROTON_TAG}-x86_64"
 GE_PROTON_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_PROTON_TAG}"
 mkdir --parents kde-linux.cache proton-ge.extra/usr/share/steam/compatibilitytools.d
-curl --fail --location --output "kde-linux.cache/${GE_PROTON_ASSET}.sha512sum" "${GE_PROTON_URL}/${GE_PROTON_ASSET}.sha512sum"
-curl --fail --location --output "kde-linux.cache/${GE_PROTON_ASSET}.tar.gz" "${GE_PROTON_URL}/${GE_PROTON_ASSET}.tar.gz"
+curl --fail --location --retry 3 --retry-delay 5 \
+    --output "kde-linux.cache/${GE_PROTON_ASSET}.sha512sum" "${GE_PROTON_URL}/${GE_PROTON_ASSET}.sha512sum"
+curl --fail --location --retry 3 --retry-delay 5 \
+    --output "kde-linux.cache/${GE_PROTON_ASSET}.tar.gz" "${GE_PROTON_URL}/${GE_PROTON_ASSET}.tar.gz"
 (
     cd kde-linux.cache
     sha512sum --check --strict "${GE_PROTON_ASSET}.sha512sum"

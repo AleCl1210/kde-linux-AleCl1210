@@ -73,7 +73,30 @@ jobs:
       - name: Build the ISO
         env:
           SKIP_DEBUG_ARCHIVE: "1"
-        run: ./build_docker.sh
+        run: |
+          set -o pipefail
+          ./build_docker.sh 2>&1 | tee build-console.log
+
+      - name: Surface failure diagnostics
+        if: failure()
+        run: |
+          {
+            echo "### ISO build failed — diagnostics"
+            echo
+            echo '#### Disk'
+            echo '```'
+            df -h /
+            echo '```'
+            echo '#### Docker'
+            echo '```'
+            docker info 2>&1 | head -30
+            echo '```'
+            echo '#### Last 400 lines of build console'
+            echo '```'
+            tail -n 400 build-console.log 2>/dev/null || echo "(build-console.log missing)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::ISO build failed; see the job summary for the last 400 lines of build output"
 
       - name: Fix ownership of build outputs
         if: always()
