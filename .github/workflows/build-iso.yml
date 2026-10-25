@@ -102,7 +102,13 @@ jobs:
           # Also put the tail into an annotation: annotations are readable
           # through the API even when the log/artifact endpoints are not.
           if [ -s build-console.log ]; then
-            echo "::error::$(tail -c 6000 build-console.log | sed ':a;N;$!ba;s/\n/%0A/g')"
+            {
+              printf 'df -h: '
+              df -h / | tail -1
+              echo "%0A"
+              tail -c 6000 build-console.log | sed ':a;N;$!ba;s/\n/%0A/g'
+            } > annotation-tail.txt
+            echo "::error::$(cat annotation-tail.txt)"
           else
             echo "::error::ISO build failed and build-console.log is missing"
           fi

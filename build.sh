@@ -121,9 +121,10 @@ curl --fail --location --retry 3 --retry-delay 5 \
 tar --extract --gzip \
     --directory=proton-ge.extra/usr/share/steam/compatibilitytools.d \
     --file="kde-linux.cache/${GE_PROTON_ASSET}.tar.gz"
-# Steam discovers compatibility tools through their manifest file; make sure
-# the archive actually contained one before wasting a full image build on it.
-find proton-ge.extra -name compatibilitytool.manifest -print -quit | grep --quiet .
+# Steam discovers compatibility tools through their vdf (or legacy manifest)
+# file; make sure the archive actually contained one before wasting a full
+# image build on it.
+find proton-ge.extra \( -name compatibilitytool.vdf -o -name compatibilitytool.manifest \) -print -quit | grep --quiet .
 
 rm --recursive --force kde-linux-sysupdated
 git clone https://invent.kde.org/kde-linux/kde-linux-sysupdated

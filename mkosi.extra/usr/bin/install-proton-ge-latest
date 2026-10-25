@@ -79,8 +79,11 @@ extracted="${tmp_dir}/${tag}"
 if [[ ! -d "${extracted}" ]]; then
     extracted="$(find "${tmp_dir}" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 fi
-[[ -n "${extracted}" && -f "${extracted}/compatibilitytool.manifest" ]] ||
-    die "unexpected archive layout: no compatibilitytool.manifest found"
+# Modern Proton builds ship compatibilitytool.vdf; older ones used the legacy
+# compatibilitytool.manifest name. Accept either.
+[[ -n "${extracted}" ]] &&
+    [[ -f "${extracted}/compatibilitytool.vdf" || -f "${extracted}/compatibilitytool.manifest" ]] ||
+    die "unexpected archive layout: no compatibilitytool.vdf/manifest found"
 
 echo "Installing into ${compat_dir}..."
 mkdir --parents "${compat_dir}"
