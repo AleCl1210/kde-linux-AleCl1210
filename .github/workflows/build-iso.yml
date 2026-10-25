@@ -56,9 +56,10 @@ jobs:
           set -ex
           command -v mkfs.btrfs >/dev/null || { sudo apt-get update && sudo apt-get install -y btrfs-progs; }
           sudo systemctl stop docker.socket docker.service || true
-          # ~18 GiB btrfs filesystem as Docker's data-root (image/container
-          # layers); the build workspace itself stays on the host filesystem.
-          sudo fallocate -l 18G /var/lib/docker-btrfs.img
+          # ~40 GiB btrfs filesystem as Docker's data-root (image/container
+          # layers plus mkosi's ~22 GiB build workspace); the build outputs
+          # themselves stay on the host filesystem, which has ~140 GiB.
+          sudo fallocate -l 40G /var/lib/docker-btrfs.img
           sudo mkfs.btrfs -f /var/lib/docker-btrfs.img
           sudo mkdir -p /mnt/docker-btrfs
           sudo mount -o loop /var/lib/docker-btrfs.img /mnt/docker-btrfs
@@ -103,8 +104,8 @@ jobs:
           # through the API even when the log/artifact endpoints are not.
           if [ -s build-console.log ]; then
             {
-              printf 'df -h: '
-              df -h / | tail -1
+              echo "Disks:"
+              df -h -x tmpfs -x devtmpfs | tail -n +2
               echo "%0A"
               tail -c 6000 build-console.log | sed ':a;N;$!ba;s/\n/%0A/g'
             } > annotation-tail.txt
