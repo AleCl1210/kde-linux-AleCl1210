@@ -17,6 +17,7 @@
 /btrfs-migrator/target/
 /run0-sudo-shim/
 run0-sudo-shim.tar.gz
+/proton-ge.extra/
 
 /mkosi.extra/usr/bin/run0-sudo-shim
 /mkosi.extra/usr/lib/btrfs-migrator

@@ -102,6 +102,27 @@ tar --extract --gzip --strip-components=1 --directory run0-sudo-shim --file run0
 cargo build --release --locked --manifest-path run0-sudo-shim/Cargo.toml
 install -Dm755 run0-sudo-shim/target/release/run0-sudo-shim mkosi.extra/usr/bin/run0-sudo-shim
 
+# Bake GE-Proton (the community Proton build by GloriousEggroll) into the image
+# so Steam Play works out of the box. Upstream publishes an official sha512
+# checksum asset next to every release, which we verify the download against.
+# Bumping GE_PROTON_TAG is all it takes to move to a newer release.
+GE_PROTON_TAG=GE-Proton11-11
+GE_PROTON_ASSET="${GE_PROTON_TAG}-x86_64"
+GE_PROTON_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_PROTON_TAG}"
+mkdir --parents kde-linux.cache proton-ge.extra/usr/share/steam/compatibilitytools.d
+curl --fail --location --output "kde-linux.cache/${GE_PROTON_ASSET}.sha512sum" "${GE_PROTON_URL}/${GE_PROTON_ASSET}.sha512sum"
+curl --fail --location --output "kde-linux.cache/${GE_PROTON_ASSET}.tar.gz" "${GE_PROTON_URL}/${GE_PROTON_ASSET}.tar.gz"
+(
+    cd kde-linux.cache
+    sha512sum --check --strict "${GE_PROTON_ASSET}.sha512sum"
+)
+tar --extract --gzip \
+    --directory=proton-ge.extra/usr/share/steam/compatibilitytools.d \
+    --file="kde-linux.cache/${GE_PROTON_ASSET}.tar.gz"
+# Steam discovers compatibility tools through their manifest file; make sure
+# the archive actually contained one before wasting a full image build on it.
+find proton-ge.extra -name compatibilitytool.manifest -print -quit | grep --quiet .
+
 rm --recursive --force kde-linux-sysupdated
 git clone https://invent.kde.org/kde-linux/kde-linux-sysupdated
 DESTDIR=$PWD/mkosi.extra make --directory=kde-linux-sysupdated install
@@ -134,6 +155,7 @@ mkosi \
     --environment="KDE_LINUX_EDITION=$KDE_LINUX_EDITION" \
     --image-version="$VERSION" \
     --extra-tree="$PWD/install.tar.zst" --extra-tree="$PWD/mkosi.extra" \
+    --extra-tree="$PWD/proton-ge.extra" \
     "$@"
 
 # NOTE: /efi must be empty so auto mounting can happen. As such we put our templates in a different directory

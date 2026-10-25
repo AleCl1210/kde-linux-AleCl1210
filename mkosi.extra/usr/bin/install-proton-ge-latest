@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
+# SPDX-FileCopyrightText: 2026 AleCl1210 <139965580+AleCl1210@users.noreply.github.com>
+
+# Downloads the newest GE-Proton release from GloriousEggroll/proton-ge-custom
+# into the current user's Steam compatibility-tools directory, so newer builds
+# can be used without waiting for an OS image update.
+#
+# The pinned system-wide copy shipped in /usr/share/steam/compatibilitytools.d
+# keeps working as a fallback; this script installs next to it, per user.
+
+set -euo pipefail
+
+readonly REPO="GloriousEggroll/proton-ge-custom"
+readonly ARCH_SUFFIX="x86_64"
+
+die() {
+    echo "error: $*" >&2
+    exit 1
+}
+
+find_steam_root() {
+    local candidate
+    # Native Steam first, then the Flatpak variant if that is what is installed.
+    for candidate in \
+        "${HOME}/.steam/root" \
+        "${HOME}/.local/share/Steam" \
+        "${HOME}/.var/app/com.valvesoftware.Steam/data/Steam"; do
+        if [[ -d "${candidate}" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+command -v curl >/dev/null 2>&1 || die "curl is required"
+command -v tar >/dev/null 2>&1 || die "tar is required"
+command -v sha512sum >/dev/null 2>&1 || die "sha512sum is required"
+
+steam_root="$(find_steam_root)" ||
+    die "no Steam installation found for this user; start Steam once and try again"
+compat_dir="${steam_root}/compatibilitytools.d"
+
+echo "Fetching release information for ${REPO}..."
+release_json="$(curl --fail --silent --show-error \
+    "https://api.github.com/repos/${REPO}/releases/latest")"
+tag="$(printf '%s\n' "${release_json}" |
+    sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' |
+    head -n 1)"
+[[ -n "${tag}" ]] || die "could not determine the latest GE-Proton release"
+
+asset="${tag}-${ARCH_SUFFIX}"
+base_url="https://github.com/${REPO}/releases/download/${tag}"
+
+# Work in the user's cache directory rather than /tmp: the download plus
+# extraction need a couple of GB, and /tmp may well be a small tmpfs.
+cache_base="${XDG_CACHE_HOME:-${HOME}/.cache}"
+mkdir --parents "${cache_base}"
+tmp_dir="$(mktemp --directory --tmpdir="${cache_base}" proton-ge.XXXXXX)"
+trap 'rm --recursive --force "${tmp_dir}"' EXIT
+
+echo "Downloading ${asset}.tar.gz (several hundred MB, please wait)..."
+curl --fail --location --show-error \
+    --output "${tmp_dir}/${asset}.tar.gz" "${base_url}/${asset}.tar.gz"
+curl --fail --location --show-error \
+    --output "${tmp_dir}/${asset}.sha512sum" "${base_url}/${asset}.sha512sum"
+
+echo "Verifying sha512 checksum..."
+(
+    cd "${tmp_dir}"
+    sha512sum --check --strict "${asset}.sha512sum"
+)
+
+echo "Extracting ${tag}..."
+tar --extract --gzip --directory="${tmp_dir}" --file="${tmp_dir}/${asset}.tar.gz"
+
+extracted="${tmp_dir}/${tag}"
+if [[ ! -d "${extracted}" ]]; then
+    extracted="$(find "${tmp_dir}" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+fi
+[[ -n "${extracted}" && -f "${extracted}/compatibilitytool.manifest" ]] ||
+    die "unexpected archive layout: no compatibilitytool.manifest found"
+
+echo "Installing into ${compat_dir}..."
+mkdir --parents "${compat_dir}"
+rm --recursive --force "${compat_dir:?}/${tag}"
+mv "${extracted}" "${compat_dir}/${tag}"
+
+echo
+echo "${tag} installed successfully."
+echo "Restart Steam, then enable it for a game with:"
+echo "  Right-click game > Properties > Compatibility >"
+echo "  Force the use of a specific Steam Play compatibility tool"

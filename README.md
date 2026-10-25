@@ -33,6 +33,14 @@ Life on a cutting-edge immutable OS can be unfamiliar! Read the [official docume
 Post at https://discuss.kde.org and tag your post with "kde-linux".
 
 
+## Gaming edition
+This fork adds a gaming-optimized configuration targeting mid-range 2022/2023 PCs
+(11th gen Intel Core i5 with Intel UHD / Iris Xe graphics): Steam with GE-Proton
+preinstalled, GameMode/MangoHud/Gamescope, the Wine compatibility stack, and a
+suite of Intel driver, Wi-Fi and hardware diagnostics tools. See
+[GAMING.md](GAMING.md) for the full list and usage tips.
+
+
 ## Report an issue with it
 - Issues in the OS itself: https://invent.kde.org/kde-linux/kde-linux/-/issues/new (ignore the scary red banner at the top of the page)
 - Issues in any of the KDE software included with the OS: https://bugs.kde.org/
