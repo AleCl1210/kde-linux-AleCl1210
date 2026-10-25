@@ -159,3 +159,52 @@ jobs:
           compression-level: 0
           retention-days: 90
           if-no-files-found: error
+
+      # The Actions artifact endpoint (Azure Blob Storage) is sometimes
+      # extremely slow depending on the network path. Release assets are
+      # served from GitHub's CDN instead, so publish the ISO there too —
+      # split into <2 GiB parts because that is GitHub's per-asset limit.
+      - name: Publish split ISO to a GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          iso=$(ls -1 mkosi.output/*.iso | head -n 1)
+          version=$(basename "${iso}" .iso)
+          echo "Splitting ${iso} ..."
+          rm -rf iso-parts
+          mkdir -p iso-parts
+          split -b 1900M -d "${iso}" "iso-parts/${version}.iso."
+          (
+              cd iso-parts
+              sha256sum "${version}.iso".[0-9][0-9] > SHA256SUMS-parts.txt
+          )
+          sha256sum "${iso}" | sed "s| .*/| |" > iso-parts/SHA256SUMS.txt
+          part_list=$(cd iso-parts && ls -1 "${version}".iso.[0-9][0-9] | tr '\n' '+' | sed 's/+$//')
+          notes=$(mktemp)
+          {
+              echo "KDE Linux **gaming edition** ISO, built by [Actions run ${GITHUB_RUN_ID}](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+              echo
+              echo "Contents: Steam with GE-Proton preinstalled, GameMode/MangoHud/Gamescope, Wine stack, Intel driver & hardware diagnostics. See \`GAMING.md\` in the repository."
+              echo
+              echo "The ISO is split into parts of ~1.9 GB (GitHub limits release assets to 2 GB each). Download every part plus put them in one folder, then reassemble:"
+              echo
+              echo 'Windows (cmd, run inside the folder):'
+              echo '```'
+              echo "copy /b ${part_list} ${version}.iso"
+              echo '```'
+              echo
+              echo 'Linux/macOS:'
+              echo '```'
+              echo "cat ${version}.iso.* > ${version}.iso"
+              echo '```'
+              echo
+              echo "SHA-256 of the reassembled ISO: \`$(cut -d' ' -f1 iso-parts/SHA256SUMS.txt)\`"
+              echo
+              echo "Verify with \`sha256sum -c\` (\`SHA256SUMS-parts.txt\` covers the parts)."
+          } > "${notes}"
+          gh release create "${version}" iso-parts/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_REF_NAME}" \
+              --title "KDE Linux gaming ISO (${version})" \
+              --notes-file "${notes}"
