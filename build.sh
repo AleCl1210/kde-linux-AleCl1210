@@ -173,7 +173,14 @@ rm -v "${OUTPUT}"/kde-linux.efi
 mv -v "${OUTPUT}"/erofs.addon.efi "${OUTPUT}_erofs.addon.efi"
 mv -v "${OUTPUT}"/live.efi "$LIVE_UKI"
 
-make_debug_archive
+# The debug symbols archive is an extra artifact (sexts the ISO not), but it
+# costs tens of GB of transient disk space. CI runners with limited disk can
+# set SKIP_DEBUG_ARCHIVE=1 to skip it; nothing in the ISO depends on it.
+if [ -z "${SKIP_DEBUG_ARCHIVE:-}" ]; then
+    make_debug_archive
+else
+    echo "SKIP_DEBUG_ARCHIVE is set; skipping the debug symbols archive" >&2
+fi
 
 # Now let's actually build the live ESP.
 # We use kde-linux.cache instead of /tmp as usual because we'll probably run out of space there.
@@ -241,8 +248,11 @@ systemd-repart \
     --el-torito-publisher="KDE" \
     "$ISO"
 
-# In case the owner is root
-chown -R user:user mkosi.output
+# In case the owner is root. Fall back gracefully in containers with no
+# 'user' account (e.g. CI builds), where the output is already root-owned.
+chown -R user:user mkosi.output 2>/dev/null ||
+    chown -R "$(id -u):$(id -g)" mkosi.output 2>/dev/null ||
+    true
 
 # Create a torrent for the image
 ./torrent-create.rb "$VERSION" "$OUTPUT" "$ISO"

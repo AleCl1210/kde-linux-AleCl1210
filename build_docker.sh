@@ -113,6 +113,12 @@ then
   ENV_OPTIONS="$ENV_OPTIONS -e PARALLEL_DOWNLOADS=$PARALLEL_DOWNLOADS"
 fi
 
+# Allow CI to skip building the (disk-hungry) debug symbols archive.
+if [ -n "${SKIP_DEBUG_ARCHIVE:-}" ]
+then
+  ENV_OPTIONS="$ENV_OPTIONS -e SKIP_DEBUG_ARCHIVE=$SKIP_DEBUG_ARCHIVE"
+fi
+
 # shellcheck disable=SC2086
 # Spin up a new Arch Linux container and run the in_docker.sh script inside of it,
 # passing any command line arguments to it and mounting $SCRIPT_DIR to /workspace.

@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
+# SPDX-FileCopyrightText: 2026 AleCl1210 <139965580+AleCl1210@users.noreply.github.com>
+
+# Builds the gaming edition ISO in the cloud using the same containerized
+# build path as upstream KDE Linux (build_docker.sh -> in_docker.sh ->
+# bootstrap.sh + build.sh inside an Arch Linux container).
+#
+# Runner prep the build needs:
+#  - a lot of disk: preinstalled toolchains are wiped first, and the debug
+#    symbols archive (transiently tens of GB) is skipped via
+#    SKIP_DEBUG_ARCHIVE=1 — it is not part of the ISO
+#  - a btrfs storage driver for Docker, as required by build_docker.sh
+
+name: Build ISO
+
+on:
+  push:
+    branches:
+      - arena/fc1d5a03-kde-linux-alecl1210
+  workflow_dispatch:
+
+concurrency:
+  group: build-iso-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build KDE Linux gaming ISO
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          set -x
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /usr/local/share/powershell \
+            /usr/local/share/chromium \
+            /usr/local/share/boost \
+            /usr/share/swift \
+            /opt/hostedtoolcache \
+            /var/lib/docker
+          df -h /
+
+      - name: Configure Docker to use a btrfs storage driver
+        run: |
+          set -ex
+          command -v mkfs.btrfs >/dev/null || { sudo apt-get update && sudo apt-get install -y btrfs-progs; }
+          sudo systemctl stop docker.socket docker.service || true
+          # ~18 GiB btrfs filesystem as Docker's data-root (image/container
+          # layers); the build workspace itself stays on the host filesystem.
+          sudo fallocate -l 18G /var/lib/docker-btrfs.img
+          sudo mkfs.btrfs -f /var/lib/docker-btrfs.img
+          sudo mkdir -p /mnt/docker-btrfs
+          sudo mount -o loop /var/lib/docker-btrfs.img /mnt/docker-btrfs
+          sudo mkdir -p /mnt/docker-btrfs/data
+          printf '%s\n' '{"storage-driver": "btrfs", "data-root": "/mnt/docker-btrfs/data"}' \
+            | sudo tee /etc/docker/daemon.json
+          sudo systemctl start docker.socket docker.service
+          for _ in $(seq 1 30); do
+            docker info >/dev/null 2>&1 && break
+            sleep 2
+          done
+          test "$(docker info --format '{{.Driver}}')" = btrfs
+          df -h /
+
+      - name: Build the ISO
+        env:
+          SKIP_DEBUG_ARCHIVE: "1"
+        run: ./build_docker.sh
+
+      - name: Fix ownership of build outputs
+        if: always()
+        run: sudo chown -R "$(id -u):$(id -g)" .
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p build-logs
+          find . -maxdepth 3 -name '*.log' -exec cp -t build-logs {} + 2>/dev/null || true
+          df -h / > build-logs/df-final.txt
+          docker info > build-logs/docker-info.txt 2>&1 || true
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build-logs/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: kde-linux-gaming-iso
+          path: mkosi.output/*.iso
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
